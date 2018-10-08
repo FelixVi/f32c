@@ -214,6 +214,7 @@ generic (
 );
 port (
   clk: in std_logic;
+  clk_sdram: in std_logic := '0';
   clk_pixel: in std_logic := '0'; -- VGA pixel clock 25 MHz
   clk_pixel_shift: in std_logic := '0'; -- digital video (DVID/HDMI) bit shift clock, for SDR 10x clk_pixel, for DDR 5x clk_pixel, default 0 if no digital video
   clk_fmdds: in std_logic := '0'; -- FM DDS clock (>216 MHz)
@@ -777,7 +778,7 @@ begin
       cycles_per_refresh => C_sdram_cycles_per_refresh
     )
     port map (
-      clk => clk, reset => sio_break_internal(0), -- SDRAM when preloaded must not be held at reset
+      clk => clk_sdram, reset => sio_break_internal(0), -- SDRAM when preloaded must not be held at reset
       -- internal connections
       data_out => from_xram, bus_in => to_xram, ready_out => xram_ready,
       snoop_cycle => snoop_cycle, snoop_addr => snoop_addr,
