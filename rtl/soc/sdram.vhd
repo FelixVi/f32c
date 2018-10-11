@@ -141,7 +141,8 @@ architecture Behavioral of sdram is
     attribute IOB of iob_data   : signal is "true";
   
     signal iob_data_next: std_logic_vector(15 downto 0) := (others => '0');
-    signal R_from_sdram: std_logic_vector(31 downto 0);
+    signal R_from_sdram: std_logic_vector(15 downto 0);
+    signal R_from_sdram_dly0: std_logic_vector(15 downto 0);
     signal R_ready_out: sram_ready_array; -- one bit per port
     attribute IOB of R_from_sdram: signal is "true";
   
@@ -296,12 +297,12 @@ begin
     capture_proc: process(clk)
     begin
 	if (C_clock_range mod 2) = 0 and rising_edge(clk) then
-	    R_from_sdram(31 downto 16) <= sdram_data;
-	    R_from_sdram(15 downto 0) <= R_from_sdram(31 downto 16);
+	    R_from_sdram <= sdram_data;
+	    R_from_sdram_dly0 <= R_from_sdram;
 	end if;
 	if (C_clock_range mod 2) = 1 and falling_edge(clk) then
-	    R_from_sdram(31 downto 16) <= sdram_data;
-	    R_from_sdram(15 downto 0) <= R_from_sdram(31 downto 16);
+	    R_from_sdram <= sdram_data;
+	    R_from_sdram_dly0 <= R_from_sdram;
 	end if;
     end process;
     end generate;
@@ -321,23 +322,23 @@ begin
     begin
 	if (C_clock_range mod 2) = 0 and rising_edge(clk) then
             if data_ready_delay(2) = '1' then
-	        R_from_sdram(15 downto 0) <= sdram_data;
+	        R_from_sdram <= sdram_data;
             end if;
             if data_ready_delay(1) = '1' then
-	        R_from_sdram(31 downto 16) <= sdram_data;
+	        R_from_sdram_dly0 <= sdram_data;
             end if;
 	end if;
 	if (C_clock_range mod 2) = 1 and falling_edge(clk) then
             if data_ready_delay(2) = '1' then
-	        R_from_sdram(15 downto 0) <= sdram_data;
+	        R_from_sdram <= sdram_data;
             end if;
             if data_ready_delay(1) = '1' then
-	        R_from_sdram(31 downto 16) <= sdram_data;
+	        R_from_sdram_dly0 <= sdram_data;
             end if;
 	end if;
     end process;
     end generate;
-    data_out <= R_from_sdram;
+    data_out <= R_from_sdram_dly0 & R_from_sdram;
 
     main_proc: process(clk)
     begin
