@@ -48,7 +48,8 @@ entity xil_pll is
     clk_dive          : integer := 10;
     clk_phasee        : real    := 0.0;
     clk_divf          : integer := 10;
-    clk_phasef        : real    := 0.0
+    clk_phasef        : real    := 0.0;
+    C_in_bufg         : boolean := true
   );
   port(
     -- Clock in ports
@@ -79,11 +80,17 @@ architecture RTL of xil_pll is
 
 begin
 
-  clkin_bufg : IBUFG
-  port map(
-    O => clkin_buf,
-    I => clk_in
-  );
+  inst_in_bufg: if C_in_bufg generate
+    clkin_bufg : IBUFG
+    port map(
+      O => clkin_buf,
+      I => clk_in
+    );
+  end generate;
+
+  inst_no_in_bufg: if not C_in_bufg generate
+    clkin_buf <= clk_in;
+  end generate;
 
   inst_pll_base : PLL_BASE
   generic map(
@@ -96,20 +103,20 @@ begin
     CLKOUT0_DIVIDE       => clk_diva,
     CLKOUT0_PHASE        => clk_phasea,
     CLKOUT0_DUTY_CYCLE   => 0.500,
-    CLKOUT1_DIVIDE       => clk_diva,
-    CLKOUT1_PHASE        => clk_phasea,
+    CLKOUT1_DIVIDE       => clk_divb,
+    CLKOUT1_PHASE        => clk_phaseb,
     CLKOUT1_DUTY_CYCLE   => 0.500,
-    CLKOUT2_DIVIDE       => clk_diva,
-    CLKOUT2_PHASE        => clk_phasea,
+    CLKOUT2_DIVIDE       => clk_divc,
+    CLKOUT2_PHASE        => clk_phasec,
     CLKOUT2_DUTY_CYCLE   => 0.500,
-    CLKOUT3_DIVIDE       => clk_diva,
-    CLKOUT3_PHASE        => clk_phasea,
+    CLKOUT3_DIVIDE       => clk_divd,
+    CLKOUT3_PHASE        => clk_phased,
     CLKOUT3_DUTY_CYCLE   => 0.500,
-    CLKOUT4_DIVIDE       => clk_diva,
-    CLKOUT4_PHASE        => clk_phasea,
+    CLKOUT4_DIVIDE       => clk_dive,
+    CLKOUT4_PHASE        => clk_phasee,
     CLKOUT4_DUTY_CYCLE   => 0.500,
-    CLKOUT5_DIVIDE       => clk_diva,
-    CLKOUT5_PHASE        => clk_phasea,
+    CLKOUT5_DIVIDE       => clk_divf,
+    CLKOUT5_PHASE        => clk_phasef,
     CLKOUT5_DUTY_CYCLE   => 0.500,
     CLKIN_PERIOD         => clk_in_period_ns,
     REF_JITTER           => 0.010
