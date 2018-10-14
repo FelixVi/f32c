@@ -258,8 +258,8 @@ port (
   --
   sio_rxd: in std_logic_vector(C_sio - 1 downto 0);
   sio_txd, sio_break: out std_logic_vector(C_sio - 1 downto 0);
-  spi_sck, spi_ss, spi_mosi: out std_logic_vector(C_spi - 1 downto 0);
-  spi_miso: in std_logic_vector(C_spi - 1 downto 0) := (others => '-');
+  spi_sck, spi_ss, spi_mosi: out std_logic_vector(C_spi - 2 downto 0);
+  spi_miso: in std_logic_vector(C_spi - 2 downto 0) := (others => '-');
   simple_in: in std_logic_vector(31 downto 0);
   simple_out: out std_logic_vector(31 downto 0);
   pid_encoder_a, pid_encoder_b: in  std_logic_vector(C_pids-1 downto 0) := (others => '-');
@@ -325,7 +325,8 @@ architecture Behavioral of glue_xram is
     -- not yet working on ULX2S
     constant refresh_port: integer := 3;
     constant pcm_port: integer := 4;
-    constant C_xram_ports: integer := 5;
+    constant spi_port: integer := 5;
+    constant C_xram_ports: integer := 6;
 
     -- io base
     type T_iomap_range is array(0 to 1) of std_logic_vector(15 downto 0);
@@ -357,6 +358,15 @@ architecture Behavioral of glue_xram is
         return 12;
       end if;
     end;
+
+    --testing sdram
+    signal spi_xram_port : sram_port_type;
+    signal spi_data_ready : std_logic;
+    signal spi_data : std_logic_vector(31 downto 0);
+    signal spi_sdram_sck : std_logic;
+    signal spi_sdram_ss : std_logic;
+    signal spi_sdram_miso : std_logic;
+    signal spi_sdram_mosi : std_logic;
 
     -- Timer
     constant iomap_timer: T_iomap_range := (x"F900", x"F93F");
@@ -696,6 +706,9 @@ begin
         to_xram(pcm_port).data_in <= (others => '-');
         pcm_data_ready <= xram_ready(pcm_port);
     end generate;
+    -- port 5: SPI-sdram bridge
+    to_xram(spi_port) <= spi_xram_port;
+    spi_data_ready <= xram_ready(spi_port);
     end generate; -- G_xram
     
     G_sram16bit:
@@ -766,30 +779,59 @@ begin
     sdram: entity work.sdram -- _mz_wrap
     generic map (
       C_ports => C_xram_ports,
-      --C_prio_port => 2, -- VGA priority port not yet implemented
-      --C_ras => 3,
-      --C_cas => 3,
-      --C_pre => 3,
-      --C_shift_read => true, -- 16->32 bit collection: true: shifter, false: multiplexer
-      C_clock_range => C_sdram_clock_range, -- 1 or 2 works at 100 MHz
-      sdram_address_width => C_sdram_address_width,
-      sdram_column_bits => C_sdram_column_bits,
-      sdram_startup_cycles => C_sdram_startup_cycles,
-      cycles_per_refresh => C_sdram_cycles_per_refresh
+      C_prio_port           => -1,
+      C_ras                 => 2,
+      C_cas                 => 2,
+      C_pre                 => 2,
+      C_clock_range         => 2,
+      C_ready_point         => 0,
+      C_done_point          => 0,
+      sdram_address_width   => 24,
+      sdram_column_bits     => 9,
+      sdram_startup_cycles  => 11000,
+      cycles_per_refresh    => 1524
     )
     port map (
-      clk => clk_sdram, reset => sio_break_internal(0), -- SDRAM when preloaded must not be held at reset
+      clk => clk, reset => sio_break_internal(0), -- SDRAM when preloaded must not be held at reset
       -- internal connections
-      data_out => from_xram, bus_in => to_xram, ready_out => xram_ready,
-      snoop_cycle => snoop_cycle, snoop_addr => snoop_addr,
+      data_out      => from_xram,
+      bus_in        => to_xram,
+      ready_out     => xram_ready,
+      snoop_cycle   => snoop_cycle,
+      snoop_addr    => snoop_addr,
       -- external SDRAM interface
-      sdram_addr => sdram_addr, sdram_data => sdram_data,
-      sdram_ba => sdram_ba, sdram_dqm => sdram_dqm,
-      sdram_ras => sdram_ras, sdram_cas => sdram_cas,
-      sdram_cke => sdram_cke, sdram_clk => sdram_clk,
-      sdram_we => sdram_we, sdram_cs => sdram_cs
+      sdram_addr    => sdram_addr,
+      sdram_data    => sdram_data,
+      sdram_ba      => sdram_ba,
+      sdram_dqm     => sdram_dqm,
+      sdram_ras     => sdram_ras,
+      sdram_cas     => sdram_cas,
+      sdram_cke     => sdram_cke,
+      sdram_clk     => sdram_clk,
+      sdram_we      => sdram_we,
+      sdram_cs      => sdram_cs
     );
     end generate; -- end final G_sdram
+
+    sdram_spi: entity work.bridge_spi_sdram
+    port map(
+    clk         => clk,
+    reset       => sio_break_internal(0),
+
+    -- SPI interface
+    spi_sck     => spi_sdram_sck,
+    spi_mosi    => spi_sdram_mosi,
+    spi_cen     => spi_sdram_ss,
+    spi_miso    => spi_sdram_miso,
+
+    rfd         => open,
+    data_rdy    => open,
+
+    -- SDRAM port connection
+    sdram_data_out  => from_xram,
+    sdram_ready_out => spi_data_ready,
+    sdram_bus_in    => spi_xram_port
+    );
 
     G_no_sdram: if not C_sdram generate
     -- disable SDRAM, but we need to
@@ -878,7 +920,7 @@ begin
     sio_rx(0) <= sio_rxd(0);
 
     -- SPI
-    G_spi: for i in 0 to C_spi - 1 generate
+    G_spi: for i in 0 to C_spi - 2 generate
         spi_instance: entity work.spi
         generic map (
           C_turbo_mode => C_spi_turbo_mode(i) = '1',
@@ -899,6 +941,20 @@ begin
       spi_range <= '1' when iomap_from(iomap_spi, iomap_range) to iomap_to(iomap_spi, iomap_range),
                    '0' when others;
     end generate;
+
+    G_spi_sdram: entity work.spi
+        port map (
+          clk => clk, ce => spi_ce(2),
+          bus_write => dmem_write, byte_sel => dmem_byte_sel,
+          bus_in => cpu_to_dmem,
+          bus_out => from_spi(2),
+          spi_sck => spi_sdram_sck,
+          spi_cen => spi_sdram_ss,
+          spi_miso => spi_sdram_miso,
+          spi_mosi => spi_sdram_mosi
+        );
+        spi_ce(2) <= io_addr_strobe when io_addr(11 downto 6) = x"3" & "01" and
+          conv_integer(io_addr(5 downto 4)) = 2 else '0';
 
     --
     -- Simple I/O
